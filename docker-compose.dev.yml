@@ -1,0 +1,12 @@
+services:
+  discord-bot:
+    build:
+      context: .
+      target: dev
+    volumes:
+      - ./src:/app/src
+      - ./config:/app/config:ro
+      - ./lang:/app/lang:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+    environment:
+      - NODE_ENV=development

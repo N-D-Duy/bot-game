@@ -1,0 +1,12 @@
+services:
+  discord-bot:
+    build: .
+    restart: unless-stopped
+    volumes:
+      # Mount config at runtime so secrets stay out of the image
+      - ./config/config.json:/app/config/config.json:ro
+      - ./config/debug.json:/app/config/debug.json:ro
+    environment:
+      - NODE_ENV=production
+    # Uncomment below to add AI provider keys when ready
+    # env_file: .env
