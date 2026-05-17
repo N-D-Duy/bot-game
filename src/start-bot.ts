@@ -3,7 +3,7 @@ import { Options, Partials } from 'discord.js';
 import { createRequire } from 'node:module';
 import 'reflect-metadata';
 
-import { DonateWebhookController, RootController } from './controllers/index.js';
+import { NotifyWebhookController, DonateWebhookController, RootController } from './controllers/index.js';
 import { Button } from './buttons/index.js';
 import {
     AccountCommand,
@@ -151,10 +151,12 @@ async function start(): Promise<void> {
         donateChannelService
     );
 
+    let notifyWebhookController = new NotifyWebhookController(client, Config.channels ?? {});
+    notifyWebhookController.authToken = Config.api.secret;
     let donateWebhookController = new DonateWebhookController(donateChannelService);
     donateWebhookController.authToken = Config.api.secret;
     let rootController = new RootController();
-    let api = new Api([rootController, donateWebhookController]);
+    let api = new Api([rootController, notifyWebhookController, donateWebhookController]);
 
     // Register
     if (process.argv[2] == 'commands') {
