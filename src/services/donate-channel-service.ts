@@ -106,28 +106,17 @@ export class DonateChannelService {
             return;
         }
 
-        const statusText = payload.success === false ? '❌ Thất bại' : '✅ Thành công';
-        const amountText =
-            typeof payload.amount === 'number'
-                ? `\nSố tiền: ${payload.amount.toLocaleString('vi-VN')} VND`
-                : '';
-        const txText = payload.transaction_id ? `\nMã GD: ${payload.transaction_id}` : '';
-        const messageText = payload.message ? `\nNội dung: ${payload.message}` : '';
-
-        const notifyText =
-            `Kết quả donate cho ${session.username} (${session.playerId})\n` +
-            `${statusText}${amountText}${txText}${messageText}`;
-
-        const user = await this.client.users.fetch(session.requesterId).catch(() => null);
-        if (user) {
-            await user.send(notifyText).catch(() => null);
+        if (payload.success === false) {
+            this.pendingByPlayerId.delete(session.playerId);
+            this.pendingByUsername.delete(session.username.toLowerCase());
+            return;
         }
 
         const channel = await this.getTextChannel();
         if (channel) {
             await channel
                 .send({
-                    content: `<@${session.requesterId}> ${notifyText}`,
+                    content: `<@${session.requesterId}> thành công`,
                     allowedMentions: { users: [session.requesterId] },
                 })
                 .catch(() => null);
