@@ -87,6 +87,12 @@
         "defaultModel": "fast",
         "systemPrompt": "",
         "maxTokens": 1024,
+        "rateLimit": {
+            "windowSec": 60,
+            "userPerWindow": 6,
+            "channelPerWindow": 30,
+            "maxQueuePerUser": 3
+        },
         "openRouterApiKey": "<OPENROUTER_API_KEY>",
         "azure": {
             "key": "<AZURE_OPENAI_KEY>",
