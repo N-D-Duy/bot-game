@@ -1,12 +1,15 @@
 import {
+    ActionRowBuilder,
     ApplicationCommandOptionType,
     ChatInputCommandInteraction,
+    ModalBuilder,
     PermissionsString,
+    TextInputBuilder,
+    TextInputStyle,
 } from 'discord.js';
 import { createRequire } from 'node:module';
 
 import { EventData } from '../../models/internal-models.js';
-import { InteractionUtils } from '../../utils/index.js';
 import { Command, CommandDeferType } from '../index.js';
 import type { GameApiService } from '../../services/game-api-service.js';
 
@@ -23,7 +26,7 @@ let Config = require('../../../config/config.json');
  */
 export class AccountCommand implements Command {
     public names = ['account'];
-    public deferType = CommandDeferType.HIDDEN;
+    public deferType = CommandDeferType.NONE;
     public requireClientPerms: PermissionsString[] = [];
 
     constructor(private readonly gameApiService: GameApiService) {}
@@ -35,101 +38,143 @@ export class AccountCommand implements Command {
             options: [
                 {
                     name: 'create',
-                    description: 'Create a new game account',
+                    description: 'Tạo tài khoản game mới',
                     type: ApplicationCommandOptionType.Subcommand,
-                    options: [
-                        {
-                            name: 'username',
-                            description: 'Account username',
-                            type: ApplicationCommandOptionType.String,
-                            required: true,
-                        },
-                        {
-                            name: 'password',
-                            description: 'Account password',
-                            type: ApplicationCommandOptionType.String,
-                            required: true,
-                        },
-                    ],
                 },
                 {
                     name: 'change-password',
-                    description: 'Change your game account password',
+                    description: 'Đổi mật khẩu tài khoản game',
                     type: ApplicationCommandOptionType.Subcommand,
-                    options: [
-                        {
-                            name: 'username',
-                            description: 'Account username',
-                            type: ApplicationCommandOptionType.String,
-                            required: true,
-                        },
-                        {
-                            name: 'old_password',
-                            description: 'Current password',
-                            type: ApplicationCommandOptionType.String,
-                            required: true,
-                        },
-                        {
-                            name: 'new_password',
-                            description: 'New password',
-                            type: ApplicationCommandOptionType.String,
-                            required: true,
-                        },
-                    ],
                 },
             ],
         };
     }
 
     public async execute(intr: ChatInputCommandInteraction, _data: EventData): Promise<void> {
-        // Restrict to the designated accounts channel (if configured)
         const accountsChannelId = Config.channels?.accounts;
         if (accountsChannelId && intr.channelId !== accountsChannelId) {
-            await InteractionUtils.send(
-                intr,
-                `Account commands can only be used in <#${accountsChannelId}>.`
-            );
+            await intr.reply({
+                content: `Account commands can only be used in <#${accountsChannelId}>.`,
+                ephemeral: true,
+            });
             return;
         }
 
         const subcommand = intr.options.getSubcommand(true);
 
-        try {
-            if (subcommand === 'create') {
-                await this.handleCreate(intr);
-            } else if (subcommand === 'change-password') {
-                await this.handleChangePassword(intr);
-            }
-        } catch (error) {
-            await InteractionUtils.send(
-                intr,
-                `Error: ${(error as Error).message}`
-            );
+        if (subcommand === 'create') {
+            await this.showCreateModal(intr);
+        } else if (subcommand === 'change-password') {
+            await this.showChangePasswordModal(intr);
         }
     }
 
-    private async handleCreate(intr: ChatInputCommandInteraction): Promise<void> {
-        const username = intr.options.getString('username', true);
-        const password = intr.options.getString('password', true);
-        const phone = this.generatePhone();
+    private async showCreateModal(intr: ChatInputCommandInteraction): Promise<void> {
+        const modal = new ModalBuilder()
+            .setCustomId('account_create')
+            .setTitle('Tạo tài khoản game')
+            .addComponents(
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('username')
+                        .setLabel('Tên đăng nhập')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(5)
+                        .setMaxLength(20)
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('password')
+                        .setLabel('Mật khẩu')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(5)
+                        .setMaxLength(30)
+                        .setRequired(true)
+                )
+            );
 
-        const result = await this.gameApiService.register({ username, password, phone });
+        await intr.showModal(modal);
 
-        await InteractionUtils.send(intr, result.message);
+        try {
+            const submitted = await intr.awaitModalSubmit({
+                time: 120_000,
+                filter: i => i.customId === 'account_create' && i.user.id === intr.user.id,
+            });
+            const username = submitted.fields.getTextInputValue('username').trim();
+            const password = submitted.fields.getTextInputValue('password').trim();
+            const phone = this.generatePhone();
+
+            try {
+                const result = await this.gameApiService.register({ username, password, phone });
+                await submitted.reply({ content: `✅ ${result.message}`, ephemeral: true });
+            } catch (err) {
+                await submitted.reply({ content: `❌ ${(err as Error).message}`, ephemeral: true });
+            }
+        } catch {
+            // Modal timed out — user closed it without submitting
+        }
     }
 
-    private async handleChangePassword(intr: ChatInputCommandInteraction): Promise<void> {
-        const username = intr.options.getString('username', true);
-        const old_password = intr.options.getString('old_password', true);
-        const new_password = intr.options.getString('new_password', true);
+    private async showChangePasswordModal(intr: ChatInputCommandInteraction): Promise<void> {
+        const modal = new ModalBuilder()
+            .setCustomId('account_change_password')
+            .setTitle('Đổi mật khẩu game')
+            .addComponents(
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('username')
+                        .setLabel('Tên đăng nhập')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(5)
+                        .setMaxLength(20)
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('old_password')
+                        .setLabel('Mật khẩu hiện tại')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(5)
+                        .setMaxLength(30)
+                        .setRequired(true)
+                ),
+                new ActionRowBuilder<TextInputBuilder>().addComponents(
+                    new TextInputBuilder()
+                        .setCustomId('new_password')
+                        .setLabel('Mật khẩu mới')
+                        .setStyle(TextInputStyle.Short)
+                        .setMinLength(5)
+                        .setMaxLength(30)
+                        .setRequired(true)
+                )
+            );
 
-        const result = await this.gameApiService.changePassword({
-            username,
-            old_password,
-            new_password,
-        });
+        await intr.showModal(modal);
 
-        await InteractionUtils.send(intr, result.message);
+        try {
+            const submitted = await intr.awaitModalSubmit({
+                time: 120_000,
+                filter: i =>
+                    i.customId === 'account_change_password' && i.user.id === intr.user.id,
+            });
+            const username = submitted.fields.getTextInputValue('username').trim();
+            const old_password = submitted.fields.getTextInputValue('old_password').trim();
+            const new_password = submitted.fields.getTextInputValue('new_password').trim();
+
+            try {
+                const result = await this.gameApiService.changePassword({
+                    username,
+                    old_password,
+                    new_password,
+                });
+                await submitted.reply({ content: `✅ ${result.message}`, ephemeral: true });
+            } catch (err) {
+                await submitted.reply({ content: `❌ ${(err as Error).message}`, ephemeral: true });
+            }
+        } catch {
+            // Modal timed out — user closed it without submitting
+        }
     }
 
     private generatePhone(): string {
